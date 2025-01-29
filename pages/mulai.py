@@ -10,14 +10,14 @@ import sys
 import pyvirtualcam  # OBS Virtual Camera
 from assets.colors.custom_colors import CustomColor
 
-# **Control Virtual Camera on macOS**
-ENABLE_VIRTUALCAM_MACOS = sys.platform != "darwin"  # ✅ Disable VirtualCam for macOS
-
 # Lazy import for TensorFlow-related dependencies
 mp = None  
 model = [None]
 labels_dict = [None]
 model_loaded = [False]
+
+# Disable virtual camera on macOS
+ENABLE_VIRTUAL_CAM = sys.platform != "darwin"  # False for macOS, True for Windows
 
 def load_heavy_dependencies():
     """Load TensorFlow and MediaPipe only when needed."""
@@ -96,8 +96,8 @@ def MulaiPage(page: ft.Page):
             )
             stop_flag[0] = False
 
-            # ✅ Only Enable Virtual Camera on Windows (Disable for macOS)
-            if ENABLE_VIRTUALCAM_MACOS:
+            # Initialize virtual camera **only if enabled and running on Windows**
+            if ENABLE_VIRTUAL_CAM:
                 virtual_cam[0] = pyvirtualcam.Camera(width=W, height=H, fps=30)
                 print(f"✅ Virtual Camera started! Resolution: {W}x{H}")
 
@@ -152,8 +152,8 @@ def MulaiPage(page: ft.Page):
                     cv2.putText(frame, predicted_character, (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                # ✅ Send Processed Frame to OBS (Only on Windows)
-                if ENABLE_VIRTUALCAM_MACOS and virtual_cam[0]:
+                # **Send processed frame (with detection) to OBS (Windows only)**
+                if ENABLE_VIRTUAL_CAM and virtual_cam[0]:
                     virtual_cam[0].send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                     virtual_cam[0].sleep_until_next_frame()
 
@@ -175,7 +175,7 @@ def MulaiPage(page: ft.Page):
         status_text.value = "⏹️ Deteksi dihentikan."
         camera_placeholder.content = ft.Text("📷", size=100)  
 
-        if ENABLE_VIRTUALCAM_MACOS and virtual_cam[0]:
+        if ENABLE_VIRTUAL_CAM and virtual_cam[0]:
             virtual_cam[0].close()
             virtual_cam[0] = None
             print("❌ Virtual Camera stopped.")
