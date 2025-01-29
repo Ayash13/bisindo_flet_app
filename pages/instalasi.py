@@ -2,7 +2,6 @@ import flet as ft
 import subprocess
 import sys
 import os
-import urllib.request
 import time
 from threading import Thread
 from assets.colors.custom_colors import CustomColor
@@ -15,11 +14,11 @@ def InstalasiPage(page: ft.Page):
         border_radius=20,
         color=CustomColor.PRIMARY,
         bgcolor=CustomColor.SECONDARY,
-        value=0.0  # Default to 0%
+        value=0.0
     )
 
     status_text = ft.Text(
-        "Menunggu proses instalasi...",
+        "Menunggu proses pemeriksaan...",
         size=18,
         color=CustomColor.TEXT,
         weight=ft.FontWeight.BOLD
@@ -31,211 +30,98 @@ def InstalasiPage(page: ft.Page):
         color=CustomColor.TEXT
     )
 
-    # Read dependencies dynamically from requirements.txt
+    # Load dependencies from requirements.txt
     requirements_path = os.path.join(os.path.dirname(__file__), "..", "requirements.txt")
-    if os.path.exists(requirements_path):
-        with open(requirements_path, "r") as file:
-            dependencies = [line.strip() for line in file if line.strip() and not line.startswith("#")]
-    else:
-        dependencies = []
+    dependencies = []
 
-    # Create dependency status row with checkboxes and labels
+    if os.path.exists(requirements_path):
+        with open(requirements_path, "r", encoding="utf-8") as file:
+            dependencies = [line.strip() for line in file if line.strip() and not line.startswith("#")]
+
+    # UI checkboxes for dependencies
     dependency_status = [
         {"name": dep, "checkbox": ft.Checkbox(value=False, disabled=True), "label": ft.Text(dep, color=CustomColor.TEXT)}
         for dep in dependencies
     ]
 
-    # Flag to manage process control
     is_running = [False]
 
     def check_python_installed():
-        """Check if Python is installed on the system."""
+        """Check if Python is installed properly."""
         try:
-            subprocess.run(["python3", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return True
-        except Exception:
-            return False
+            python_exec = sys.executable
+            result = subprocess.run([python_exec, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    def install_python():
-        """Automatically install Python if not found."""
-        status_text.value = "⏳ Mengunduh dan menginstal Python..."
-        page.update()
+            if result.returncode == 0:
+                print(f"✅ Python ditemukan: {result.stdout.strip()}")
+                return True
 
-        if sys.platform == "win32":
-            python_installer_url = "https://www.python.org/ftp/python/3.9.9/python-3.9.9-amd64.exe"
-            installer_path = "python_installer.exe"
-        else:  # macOS
-            python_installer_url = "https://www.python.org/ftp/python/3.9.9/python-3.9.9-macos11.pkg"
-            installer_path = "python_installer.pkg"
-
-        # Download the installer
-        urllib.request.urlretrieve(python_installer_url, installer_path)
-
-        # Run the installer
-        if sys.platform == "win32":
-            subprocess.run([installer_path, "/quiet", "PrependPath=1"])
-        else:
-            subprocess.run(["sudo", "installer", "-pkg", installer_path, "-target", "/"])
-
-        time.sleep(5)  # Wait for Python to be installed
-        return check_python_installed()
-
-    def upgrade_pip():
-        """Upgrade pip to the latest version inside the virtual environment."""
-        status_text.value = "🔄 Memperbarui pip ke versi terbaru..."
-        page.update()
-        command = "bisindo_env/bin/python -m pip install --upgrade pip" if sys.platform != "win32" else "bisindo_env\\Scripts\\python -m pip install --upgrade pip"
-        result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-        # Log the output
-        with open("install.log", "a") as log:
-            log.write("\n🔄 Upgrading pip:\n")
-            log.write(result.stdout)
-            log.write("\n🚨 Errors (if any):\n")
-            log.write(result.stderr)
-
-        if result.returncode == 0:
-            print("✅ Pip upgraded successfully!")
-        else:
-            print("❌ Failed to upgrade pip:", result.stderr)
-
-    def create_virtual_env():
-        """Create a Python virtual environment."""
-        if not os.path.exists("bisindo_env"):
-            subprocess.run(["python3", "-m", "venv", "bisindo_env"])
-            upgrade_pip()  # Upgrade pip right after creating the virtual environment
-        return True
-
-    def install_requirements():
-        """Install requirements from requirements.txt and update dependency statuses."""
-        log_file = "install.log"
-
-        if len(dependencies) == 0:
-            status_text.value = "❌ Tidak ada dependensi ditemukan di requirements.txt!"
-            page.update()
-            return False
-
-        with open(log_file, "w") as log:
-            log.write("📦 **Installation Log:**\n")
-
-        start_time = time.time()  # Start time for overall installation
-        time_per_dep = []  # List to track time per dependency
-
-        for idx, dependency in enumerate(dependencies):  # Use correct index from enumerate
-            if not is_running[0]:
-                status_text.value = "❌ Instalasi dihentikan oleh pengguna."
-                page.update()
-                return False
-
-            dep_start_time = time.time()  # Start time for current dependency
-
-            status_text.value = f"📦 Menginstall dependensi: {dependency} ({idx + 1}/{len(dependencies)})..."
-            page.update()
-
-            # Install the current dependency
-            command = f"bisindo_env/bin/pip install {dependency}" if sys.platform != "win32" else f"bisindo_env\\Scripts\\pip install {dependency}"
+            command = "where python" if sys.platform == "win32" else "which python3"
             result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-            # Save logs
-            with open(log_file, "a") as log:
-                log.write(f"\n📦 Installing {dependency}:\n")
-                log.write(result.stdout)
-                log.write("\n🚨 Errors (if any):\n")
-                log.write(result.stderr)
+            if result.stdout.strip():
+                print(f"✅ Python ditemukan di: {result.stdout.strip()}")
+                return True
 
-            # Check if the installation was successful
-            if result.returncode != 0:
-                status_text.value = f"❌ Gagal menginstall {dependency}! Lihat install.log untuk detail."
-                page.update()
-                return False
+        except Exception as e:
+            print(f"❌ Error checking Python installation: {e}")
 
-            # Update checkbox and label for the installed dependency
-            dependency_status[idx]["checkbox"].value = True
-            dependency_status[idx]["label"].color = CustomColor.TEXT
-            page.update()
+        return False
 
-            # Calculate time taken for this dependency
-            dep_end_time = time.time()
-            time_taken = dep_end_time - dep_start_time
-            time_per_dep.append(time_taken)
+    def check_library_installed(library_name):
+        """Check if a library is installed in the current Python environment."""
+        try:
+            command = [sys.executable, "-m", "pip", "show", library_name]
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            return result.returncode == 0
+        except Exception as e:
+            print(f"❌ Error checking library {library_name}: {e}")
+            return False
 
-            # Update the progress bar
-            progress_bar.value = (idx + 1) / len(dependencies)
-
-            # Calculate estimated time remaining
-            avg_time = sum(time_per_dep) / len(time_per_dep)
-            remaining_time = avg_time * (len(dependencies) - (idx + 1))
-            est_time_text.value = f"⏳ Perkiraan waktu tersisa: {max(1, int(remaining_time))} detik."
-            page.update()
-
-        total_time = time.time() - start_time
-        status_text.value = f"✅ Semua dependensi terinstall dalam {int(total_time)} detik."
+    def check_dependencies():
+        """Check if all dependencies in requirements.txt are installed."""
+        status_text.value = "🔍 Memeriksa dependensi..."
         page.update()
-        return True
+
+        for idx, dependency in enumerate(dependencies):
+            if check_library_installed(dependency):
+                dependency_status[idx]["checkbox"].value = True
+                dependency_status[idx]["label"].color = CustomColor.TEXT
+            else:
+                dependency_status[idx]["checkbox"].value = False
+                dependency_status[idx]["label"].color = "#FF6B6B"  # Red for missing dependencies
+
+            progress_bar.value = (idx + 1) / len(dependencies)
+            page.update()
+
+        status_text.value = "✅ Pemeriksaan dependensi selesai."
+        page.update()
 
     def run_installation(e):
-        """Execute the installation process step-by-step with progress updates."""
-        if is_running[0]:  # Stop the installation if already running
+        """Execute the dependency check process."""
+        if is_running[0]:
             is_running[0] = False
-            start_button.text = "▶️ Mulai Instal"
+            start_button.text = "🔍 Periksa Dependensi"
             start_button.bgcolor = CustomColor.PRIMARY
             start_button.update()
             return
 
-        # Start the installation
         is_running[0] = True
-        start_button.text = "🛑 Stop Instalasi"
-        start_button.bgcolor = "#FF6B6B"  # Red color for stop
+        start_button.text = "🛑 Berhenti"
+        start_button.bgcolor = "#FF6B6B"
         start_button.update()
 
-        def installation_thread():
-            progress_bar.value = 0.0
-            status_text.value = "🔍 Memeriksa Python..."
-            page.update()
-
-            # Step 1: Check if Python is installed
-            if not check_python_installed():
-                status_text.value = "❌ Python tidak ditemukan! Menginstal Python..."
-                page.update()
-                if not install_python():
-                    status_text.value = "❌ Gagal menginstal Python! Silakan instal manual."
-                    page.update()
-                    return
-
-            progress_bar.value = 0.2
-            upgrade_pip()
-            progress_bar.value = 0.3
-            status_text.value = "✅ Python ditemukan. Membuat virtual environment..."
-            page.update()
-
-            # Step 2: Create Virtual Environment
-            if not create_virtual_env():
-                status_text.value = "❌ Gagal membuat virtual environment."
-                page.update()
-                return
-
-            progress_bar.value = 0.5
-            status_text.value = "📦 Menginstall dependensi..."
-            page.update()
-
-            # Step 3: Install Requirements
-            if not install_requirements():
-                status_text.value = "❌ Instalasi gagal. Lihat install.log untuk detail."
-                page.update()
-                return
-
-            progress_bar.value = 1.0
-            status_text.value = "✅ Instalasi selesai! Semua dependensi terinstall."
-            start_button.text = "🚀 Mulai Instal"
+        def check_thread():
+            check_dependencies()
+            is_running[0] = False
+            start_button.text = "🔍 Periksa Dependensi"
             start_button.bgcolor = CustomColor.PRIMARY
             start_button.update()
-            page.update()
 
-        # Run installation in a separate thread
-        Thread(target=installation_thread).start()
-
+        Thread(target=check_thread).start()
+        
     start_button = ft.ElevatedButton(
-        text="🚀 Mulai Instal",
+        text="🔍 Periksa Dependensi",
         bgcolor=CustomColor.PRIMARY,
         color=CustomColor.CARD,
         height=65,

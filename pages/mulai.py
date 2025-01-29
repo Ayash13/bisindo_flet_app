@@ -6,6 +6,7 @@ import numpy as np
 import json
 import os
 import base64
+import pyvirtualcam  # OBS Virtual Camera
 from assets.colors.custom_colors import CustomColor
 
 # Lazy import for TensorFlow-related dependencies
@@ -17,7 +18,7 @@ model_loaded = [False]
 def load_heavy_dependencies():
     """Load TensorFlow and MediaPipe only when needed."""
     global mp
-    import mediapipe as mp  # Load only when necessary
+    import mediapipe as mp  
     model_loaded[0] = True
 
 def load_model():
@@ -41,22 +42,23 @@ def load_model():
 def MulaiPage(page: ft.Page):
     stop_flag = [False]
     model_ready = [False]  
+    virtual_cam = [None]  
 
     def start_background_loading():
         """Load TensorFlow and model in the background after UI is displayed."""
         def background_task():
-            load_heavy_dependencies()  # Load MediaPipe
-            load_model()  # Load model and labels
-            model_ready[0] = True  # Mark everything as loaded
-            camera_placeholder.content = ft.Text("📷", size=100)  # ✅ Replace loading with the emoji
-            status_text.value = "Klik tombol mulai untuk mulai mendeteksi."  # ✅ Update status
+            load_heavy_dependencies()  
+            load_model()  
+            model_ready[0] = True  
+            camera_placeholder.content = ft.Text("📷", size=100)  
+            status_text.value = "Klik tombol mulai untuk mulai mendeteksi."  
             page.update()
 
         threading.Thread(target=background_task, daemon=True).start()
 
     def generate_placeholder_image():
         """Generates a blank white image as a placeholder."""
-        blank_image = np.ones((480, 800, 3), dtype=np.uint8) * 255  # White background
+        blank_image = np.ones((480, 800, 3), dtype=np.uint8) * 255  
         _, buffer = cv2.imencode(".png", blank_image)
         return base64.b64encode(buffer).decode("utf-8")
 
@@ -80,12 +82,19 @@ def MulaiPage(page: ft.Page):
                 page.update()
                 return
 
+            _, test_frame = cap.read()
+            H, W, _ = test_frame.shape  # Get the original camera resolution
+
             hands = mp.solutions.hands.Hands(
                 static_image_mode=False,
                 min_detection_confidence=0.6,
                 min_tracking_confidence=0.6
             )
             stop_flag[0] = False
+
+            # Initialize virtual camera using the **exact same resolution as the camera**
+            virtual_cam[0] = pyvirtualcam.Camera(width=W, height=H, fps=30)
+            print(f"✅ Virtual Camera started! Resolution: {W}x{H}")
 
             camera_placeholder.content = camera_frame  
             page.update()
@@ -95,10 +104,9 @@ def MulaiPage(page: ft.Page):
                 if not ret:
                     break
 
-                frame = cv2.flip(frame, 1)
+                frame = cv2.flip(frame, 1)  
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                H, W, _ = frame.shape
                 data_aux = []
                 x_ = []
                 y_ = []
@@ -139,6 +147,10 @@ def MulaiPage(page: ft.Page):
                     cv2.putText(frame, predicted_character, (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
+                # **Send processed frame (with detection) to OBS**
+                virtual_cam[0].send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                virtual_cam[0].sleep_until_next_frame()
+
                 _, buffer = cv2.imencode(".png", frame)
                 encoded_image = base64.b64encode(buffer).decode("utf-8")
                 camera_frame.src_base64 = encoded_image
@@ -156,6 +168,12 @@ def MulaiPage(page: ft.Page):
         stop_flag[0] = True
         status_text.value = "⏹️ Deteksi dihentikan."
         camera_placeholder.content = ft.Text("📷", size=100)  
+
+        if virtual_cam[0]:
+            virtual_cam[0].close()
+            virtual_cam[0] = None
+            print("❌ Virtual Camera stopped.")
+
         page.update()
 
     camera_frame = ft.Image(
@@ -175,7 +193,7 @@ def MulaiPage(page: ft.Page):
     )
 
     status_text = ft.Text(
-        "⏳ Memuat model...",  # ✅ Starts as "Loading..." before model is ready
+        "⏳ Memuat model...",  
         size=18,
         color=CustomColor.TEXT,
         text_align=ft.TextAlign.CENTER
@@ -209,17 +227,7 @@ def MulaiPage(page: ft.Page):
         padding=40,
         alignment=ft.alignment.center,
         content=ft.Row([
-            ft.Column(
-                expand=True,
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=40,
-                controls=[camera_placeholder, status_text]
-            ),
-            ft.Column(
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=20,
-                controls=[start_button, stop_button]
-            )
+            ft.Column(expand=True, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=40, controls=[camera_placeholder, status_text]),
+            ft.Column(alignment=ft.MainAxisAlignment.CENTER, spacing=20, controls=[start_button, stop_button])
         ])
     )
