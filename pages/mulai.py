@@ -6,8 +6,12 @@ import numpy as np
 import json
 import os
 import base64
+import sys
 import pyvirtualcam  # OBS Virtual Camera
 from assets.colors.custom_colors import CustomColor
+
+# **Control Virtual Camera on macOS**
+ENABLE_VIRTUALCAM_MACOS = sys.platform != "darwin"  # ✅ Disable VirtualCam for macOS
 
 # Lazy import for TensorFlow-related dependencies
 mp = None  
@@ -83,7 +87,7 @@ def MulaiPage(page: ft.Page):
                 return
 
             _, test_frame = cap.read()
-            H, W, _ = test_frame.shape  # Get the original camera resolution
+            H, W, _ = test_frame.shape  
 
             hands = mp.solutions.hands.Hands(
                 static_image_mode=False,
@@ -92,9 +96,10 @@ def MulaiPage(page: ft.Page):
             )
             stop_flag[0] = False
 
-            # Initialize virtual camera using the **exact same resolution as the camera**
-            virtual_cam[0] = pyvirtualcam.Camera(width=W, height=H, fps=30)
-            print(f"✅ Virtual Camera started! Resolution: {W}x{H}")
+            # ✅ Only Enable Virtual Camera on Windows (Disable for macOS)
+            if ENABLE_VIRTUALCAM_MACOS:
+                virtual_cam[0] = pyvirtualcam.Camera(width=W, height=H, fps=30)
+                print(f"✅ Virtual Camera started! Resolution: {W}x{H}")
 
             camera_placeholder.content = camera_frame  
             page.update()
@@ -147,9 +152,10 @@ def MulaiPage(page: ft.Page):
                     cv2.putText(frame, predicted_character, (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                # **Send processed frame (with detection) to OBS**
-                virtual_cam[0].send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                virtual_cam[0].sleep_until_next_frame()
+                # ✅ Send Processed Frame to OBS (Only on Windows)
+                if ENABLE_VIRTUALCAM_MACOS and virtual_cam[0]:
+                    virtual_cam[0].send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                    virtual_cam[0].sleep_until_next_frame()
 
                 _, buffer = cv2.imencode(".png", frame)
                 encoded_image = base64.b64encode(buffer).decode("utf-8")
@@ -169,7 +175,7 @@ def MulaiPage(page: ft.Page):
         status_text.value = "⏹️ Deteksi dihentikan."
         camera_placeholder.content = ft.Text("📷", size=100)  
 
-        if virtual_cam[0]:
+        if ENABLE_VIRTUALCAM_MACOS and virtual_cam[0]:
             virtual_cam[0].close()
             virtual_cam[0] = None
             print("❌ Virtual Camera stopped.")
