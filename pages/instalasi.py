@@ -24,12 +24,6 @@ def InstalasiPage(page: ft.Page):
         weight=ft.FontWeight.BOLD
     )
 
-    est_time_text = ft.Text(
-        "⏳ Perkiraan waktu tersisa: -- detik.",
-        size=14,
-        color=CustomColor.TEXT
-    )
-
     # Load dependencies from requirements.txt
     requirements_path = os.path.join(os.path.dirname(__file__), "..", "requirements.txt")
     dependencies = []
@@ -78,6 +72,39 @@ def InstalasiPage(page: ft.Page):
             print(f"❌ Error checking library {library_name}: {e}")
             return False
 
+    def check_obs_installed():
+        """Check if OBS Studio is installed on Windows or macOS."""
+        try:
+            if sys.platform == "win32":
+                possible_paths = [
+                    "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
+                    "C:\\Program Files (x86)\\obs-studio\\bin\\64bit\\obs64.exe"
+                ]
+                obs_installed = any(os.path.exists(path) for path in possible_paths)
+                if not obs_installed:
+                    result = subprocess.run("where obs", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    obs_installed = result.returncode == 0
+            else:  # macOS
+                possible_paths = [
+                    "/Applications/OBS.app",
+                    "/Applications/OBS Studio.app"
+                ]
+                obs_installed = any(os.path.exists(path) for path in possible_paths)
+                if not obs_installed:
+                    result = subprocess.run("which obs", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    obs_installed = result.returncode == 0
+
+            if obs_installed:
+                print("✅ OBS Studio ditemukan.")
+            else:
+                print("❌ OBS Studio tidak ditemukan!")
+
+            return obs_installed
+
+        except Exception as e:
+            print(f"❌ Error checking OBS installation: {e}")
+            return False
+
     def check_dependencies():
         """Check if all dependencies in requirements.txt are installed."""
         status_text.value = "🔍 Memeriksa dependensi..."
@@ -98,7 +125,7 @@ def InstalasiPage(page: ft.Page):
         page.update()
 
     def run_installation(e):
-        """Execute the dependency check process."""
+        """Execute the dependency and OBS check process."""
         if is_running[0]:
             is_running[0] = False
             start_button.text = "🔍 Periksa Dependensi"
@@ -113,13 +140,23 @@ def InstalasiPage(page: ft.Page):
 
         def check_thread():
             check_dependencies()
+            obs_installed = check_obs_installed()
+
+            if obs_installed:
+                obs_status_label.value = "📡 OBS Studio Terdeteksi! 🚀 Siap digunakan!"
+                obs_status_label.color = CustomColor.TEXT
+            else:
+                obs_status_label.value = "🚨 OBS Studio Tidak Ditemukan! 😢"
+                obs_status_label.color = "#FF6B6B"  # Red text
+
             is_running[0] = False
             start_button.text = "🔍 Periksa Dependensi"
             start_button.bgcolor = CustomColor.PRIMARY
             start_button.update()
+            page.update()
 
         Thread(target=check_thread).start()
-        
+
     start_button = ft.ElevatedButton(
         text="🔍 Periksa Dependensi",
         bgcolor=CustomColor.PRIMARY,
@@ -131,6 +168,12 @@ def InstalasiPage(page: ft.Page):
             padding=ft.Padding(18, 25, 18, 25)
         ),
         on_click=run_installation
+    )
+
+    # Fun OBS Status section (Replacing estimated time)
+    obs_status_label = ft.Text(
+        "🕵️‍♂️ Mencari OBS Studio... 🔎",
+        color="#AAAAAA"  # Gray text while searching
     )
 
     return ft.Container(
@@ -156,7 +199,8 @@ def InstalasiPage(page: ft.Page):
                 ),
                 status_text,
                 progress_bar,
-                est_time_text,
+                # Replacing estimated time with fun OBS Status
+                obs_status_label,
                 # Dependency checkboxes and labels
                 ft.Row(
                     alignment=ft.MainAxisAlignment.CENTER,
