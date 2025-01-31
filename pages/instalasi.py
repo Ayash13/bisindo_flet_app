@@ -40,28 +40,6 @@ def InstalasiPage(page: ft.Page):
 
     is_running = [False]
 
-    def check_python_installed():
-        """Check if Python is installed properly."""
-        try:
-            python_exec = sys.executable
-            result = subprocess.run([python_exec, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-            if result.returncode == 0:
-                print(f"✅ Python ditemukan: {result.stdout.strip()}")
-                return True
-
-            command = "where python" if sys.platform == "win32" else "which python3"
-            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-            if result.stdout.strip():
-                print(f"✅ Python ditemukan di: {result.stdout.strip()}")
-                return True
-
-        except Exception as e:
-            print(f"❌ Error checking Python installation: {e}")
-
-        return False
-
     def check_library_installed(library_name):
         """Check if a library is installed in the current Python environment."""
         try:

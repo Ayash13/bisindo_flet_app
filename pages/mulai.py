@@ -1,5 +1,6 @@
 import flet as ft
 import threading
+import sklearn
 from assets.colors.custom_colors import CustomColor
 from core.detection import (
     load_heavy_dependencies,

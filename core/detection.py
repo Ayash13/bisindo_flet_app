@@ -7,6 +7,7 @@ import os
 import base64
 import sys
 import flet as ft
+import sklearn
 import pyvirtualcam  # OBS Virtual Camera
 
 # Lazy import for TensorFlow-related dependencies
