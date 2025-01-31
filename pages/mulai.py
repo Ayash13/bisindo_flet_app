@@ -1,47 +1,21 @@
 import flet as ft
 import cv2
 import threading
-import pickle
-import numpy as np
-import json
-import os
-import base64
 import sys
-import pyvirtualcam  # OBS Virtual Camera
 from assets.colors.custom_colors import CustomColor
-
-# Lazy import for TensorFlow-related dependencies
-mp = None  
-model = [None]
-labels_dict = [None]
-model_loaded = [False]
-
-# Disable virtual camera on macOS
-ENABLE_VIRTUAL_CAM = sys.platform != "darwin"  # False for macOS, True for Windows
-
-def load_heavy_dependencies():
-    """Load TensorFlow and MediaPipe only when needed."""
-    global mp
-    import mediapipe as mp  
-    model_loaded[0] = True
-
-def load_model():
-    """Load the trained model and label dictionary asynchronously."""
-    try:
-        model_path = os.path.join(os.path.dirname(__file__), "../model.p")
-        labels_path = os.path.join(os.path.dirname(__file__), "../label_dict.json")
-
-        model_dict = pickle.load(open(model_path, 'rb'))
-        model[0] = model_dict['model']
-
-        with open(labels_path, 'r') as f:
-            labels_dict[0] = json.load(f)
-
-        model_loaded[0] = True
-        print("✅ Model and labels loaded successfully.")
-
-    except Exception as e:
-        print(f"❌ Error loading model: {e}")
+from core.detection import (
+    load_heavy_dependencies,
+    load_model,
+    generate_placeholder_image,
+    fix_feature_vector_length,
+    model,
+    labels_dict,
+    model_loaded,
+    ENABLE_VIRTUAL_CAM
+)
+import pyvirtualcam
+import numpy as np
+import base64
 
 def MulaiPage(page: ft.Page):
     stop_flag = [False]
@@ -60,20 +34,6 @@ def MulaiPage(page: ft.Page):
 
         threading.Thread(target=background_task, daemon=True).start()
 
-    def generate_placeholder_image():
-        """Generates a blank white image as a placeholder."""
-        blank_image = np.ones((480, 800, 3), dtype=np.uint8) * 255  
-        _, buffer = cv2.imencode(".png", blank_image)
-        return base64.b64encode(buffer).decode("utf-8")
-
-    def fix_feature_vector_length(data_aux, expected_length):
-        """Ensure feature vector has the correct length for the model."""
-        if len(data_aux) < expected_length:
-            data_aux += [0] * (expected_length - len(data_aux))  
-        elif len(data_aux) > expected_length:
-            data_aux = data_aux[:expected_length]  
-        return data_aux
-
     def start_inference(e):
         """Starts the sign language detection and updates the camera frame in Flet UI."""
         def inference_thread():
@@ -89,6 +49,7 @@ def MulaiPage(page: ft.Page):
             _, test_frame = cap.read()
             H, W, _ = test_frame.shape  
 
+            import mediapipe as mp  
             hands = mp.solutions.hands.Hands(
                 static_image_mode=False,
                 min_detection_confidence=0.6,
@@ -96,7 +57,6 @@ def MulaiPage(page: ft.Page):
             )
             stop_flag[0] = False
 
-            # Initialize virtual camera **only if enabled and running on Windows**
             if ENABLE_VIRTUAL_CAM:
                 virtual_cam[0] = pyvirtualcam.Camera(width=W, height=H, fps=30)
                 print(f"✅ Virtual Camera started! Resolution: {W}x{H}")
@@ -152,7 +112,6 @@ def MulaiPage(page: ft.Page):
                     cv2.putText(frame, predicted_character, (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                # **Send processed frame (with detection) to OBS (Windows only)**
                 if ENABLE_VIRTUAL_CAM and virtual_cam[0]:
                     virtual_cam[0].send(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                     virtual_cam[0].sleep_until_next_frame()
@@ -198,13 +157,6 @@ def MulaiPage(page: ft.Page):
         content=ft.ProgressRing(width=60, height=60, stroke_width=5)  
     )
 
-    status_text = ft.Text(
-        "⏳ Memuat model...",  
-        size=18,
-        color=CustomColor.TEXT,
-        text_align=ft.TextAlign.CENTER
-    )
-
     start_button = ft.ElevatedButton(
         text="▶️ Mulai",
         bgcolor=CustomColor.PRIMARY,
@@ -223,17 +175,25 @@ def MulaiPage(page: ft.Page):
         on_click=stop_inference
     )
 
-    start_background_loading()  
+    status_text = ft.Text(
+        "⏳ Memuat model...",  
+        size=18,
+        color=CustomColor.TEXT,
+        text_align=ft.TextAlign.CENTER
+    )
+
+    start_background_loading()
 
     return ft.Container(
         expand=True,
         width=float("inf"),
         bgcolor=CustomColor.BACKGROUND,
         border_radius=30,
-        padding=40,
+        padding=32,
         alignment=ft.alignment.center,
         content=ft.Row([
             ft.Column(expand=True, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=40, controls=[camera_placeholder, status_text]),
+            ft.Container(width=16),
             ft.Column(alignment=ft.MainAxisAlignment.CENTER, spacing=20, controls=[start_button, stop_button])
         ])
     )
