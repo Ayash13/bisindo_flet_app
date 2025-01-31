@@ -39,7 +39,7 @@ def main(page: ft.Page):
         sidebar.update_selection(route_index)
         page.update()
 
-    # Sidebar items with emojis instead of icons
+    # Sidebar items with emojis
     sidebar_items = [
         ("Petunjuk", "📄"),
         ("Instalasi", "🚀"),
@@ -57,6 +57,6 @@ def main(page: ft.Page):
 
     page.add(ft.Row([sidebar, main_content], expand=True))
     page.on_route_change = route_change
-    page.go("/petunjuk")  # Default route (does not load TensorFlow immediately)
+    page.go("/petunjuk")
 
 ft.app(target=main)
