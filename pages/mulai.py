@@ -31,7 +31,7 @@ def MulaiPage(page: ft.Page):
 
     camera_frame = ft.Image(
         fit=ft.ImageFit.COVER,
-        aspect_ratio=16 / 10.5,
+        aspect_ratio=16 / 10.6,
         src_base64=generate_placeholder_image()
     )
 
